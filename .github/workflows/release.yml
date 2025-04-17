@@ -120,8 +120,8 @@ jobs:
       
           # Only add the additional section if there are PRs not covered in the auto-generated notes
           # or if there are multiple commits
-          if [ $COMMIT_COUNT -gt 1 ]; then
-            FULL_NOTES+=$'\n\n'"## All list"$'\n'"${COMMIT_HISTORY}"
+          if [ $COMMIT_COUNT -gt $(echo "$AUTO_NOTES" | grep -c "^\*") ]; then
+            FULL_NOTES+=$'\n\n'"## Detailed Changes"$'\n'"${COMMIT_HISTORY}"
           fi
       
           # Update release with comprehensive notes
