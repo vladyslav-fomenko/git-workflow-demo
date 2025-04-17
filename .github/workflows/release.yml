@@ -118,9 +118,14 @@ jobs:
           # Create comprehensive release notes
           FULL_NOTES="${AUTO_NOTES}"
       
-          # Only add the additional section if there are PRs not covered in the auto-generated notes
-          # or if there are multiple commits
-          if [ $COMMIT_COUNT -gt $(echo "$AUTO_NOTES" | grep -c "^\*") ]; then
+          # Count actual commits between tags (excluding version bump commit)
+          ACTUAL_COMMIT_COUNT=$(git log ${PREVIOUS_TAG}..HEAD --no-merges --pretty=format:"%h" | grep -v "^[a-f0-9]\\+ ${VERSION}" | wc -l)
+      
+          # Count entries in What's Changed section
+          WHATS_CHANGED_COUNT=$(echo "$AUTO_NOTES" | grep -c "^\*")
+      
+          # Show Detailed Changes section if there are more commits than What's Changed entries
+          if [ $ACTUAL_COMMIT_COUNT -gt $WHATS_CHANGED_COUNT ]; then
             FULL_NOTES+=$'\n\n'"## Detailed Changes"$'\n'"${COMMIT_HISTORY}"
           fi
       
