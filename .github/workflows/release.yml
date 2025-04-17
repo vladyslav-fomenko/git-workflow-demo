@@ -93,12 +93,12 @@ jobs:
       
           # Gather commit information with authors in PR-like format
           COMMIT_HISTORY=""
+          COMMIT_COUNT=0
           while read -r COMMIT_HASH COMMIT_MSG; do
-            # Get commit author's email
-            AUTHOR_EMAIL=$(git show -s --format="%ae" $COMMIT_HASH)
+            COMMIT_COUNT=$((COMMIT_COUNT + 1))
             # Get author from commit metadata in GitHub
             GITHUB_USERNAME=$(gh api repos/$GITHUB_REPOSITORY/commits/$COMMIT_HASH --jq '.author.login' 2>/dev/null || echo "")
-            
+      
             # If we couldn't get username from API, use commit author name
             if [ -z "$GITHUB_USERNAME" ] || [ "$GITHUB_USERNAME" = "null" ]; then
               AUTHOR_NAME=$(git show -s --format="%an" $COMMIT_HASH)
@@ -116,7 +116,13 @@ jobs:
           done < <(git log ${PREVIOUS_TAG}..HEAD --no-merges --pretty=format:"%h %s" | grep -v "^[a-f0-9]\\+ ${VERSION}")
       
           # Create comprehensive release notes
-          FULL_NOTES="${AUTO_NOTES}"$'\n\n'"## All Changes"$'\n'"${COMMIT_HISTORY}"
+          FULL_NOTES="${AUTO_NOTES}"
+      
+          # Only add the additional section if there are PRs not covered in the auto-generated notes
+          # or if there are multiple commits
+          if [ $COMMIT_COUNT -gt 1 ]; then
+            FULL_NOTES+=$'\n\n'"## Detailed Changes"$'\n'"${COMMIT_HISTORY}"
+          fi
       
           # Update release with comprehensive notes
           echo "$FULL_NOTES" > /tmp/release-notes.md
