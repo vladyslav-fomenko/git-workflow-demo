@@ -79,8 +79,24 @@ jobs:
         run: |
           CURRENT_DATE=$(date '+%b %-d, %Y')
           COMMIT_SHA=$(git rev-parse HEAD)
+
+          # Create temporary draft release with auto-generated notes
           gh release create "v${VERSION}" \
             --target ${COMMIT_SHA} \
             --generate-notes \
             --notes-start-tag "${PREVIOUS_TAG}" \
-            --title "${VERSION} (${CURRENT_DATE})"
+            --title "${VERSION} (${CURRENT_DATE})" \
+            --draft
+
+          # Get auto-generated notes
+          AUTO_NOTES=$(gh release view "v${VERSION}" --json body -q .body)
+
+          # Gather commit information since previous tag
+          COMMIT_HISTORY=$(git log ${PREVIOUS_TAG}..HEAD --no-merges --pretty=format:"* %s (%h)" | grep -v "^* ${VERSION}")
+
+          # Create comprehensive release notes
+          FULL_NOTES="${AUTO_NOTES}"$'\n\n'"## All Changes"$'\n'"${COMMIT_HISTORY}"
+
+          # Update release with comprehensive notes
+          echo "$FULL_NOTES" > /tmp/release-notes.md
+          gh release edit "v${VERSION}" --draft=false --notes-file /tmp/release-notes.md
