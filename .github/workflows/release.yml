@@ -79,34 +79,8 @@ jobs:
         run: |
           CURRENT_DATE=$(date '+%b %-d, %Y')
           COMMIT_SHA=$(git rev-parse HEAD)
-          
-          # Create temporary draft release with auto-generated notes
           gh release create "v${VERSION}" \
             --target ${COMMIT_SHA} \
             --generate-notes \
-            --notes-start-tag ${PREVIOUS_TAG} \
-            --title "${VERSION} (${CURRENT_DATE})" \
-            --draft
-
-          # Get auto-generated notes
-          AUTO_NOTES=$(gh release view "v${VERSION}" --json body -q .body)
-
-          # Count PRs in this release (items in What's Changed section)
-          PR_COUNT=$(echo "$AUTO_NOTES" | grep -c "^\* ")
-
-          # Count non-version commits between tags
-          COMMIT_COUNT=$(git log ${PREVIOUS_TAG}..HEAD --no-merges | grep -v -i "version" | grep -c "^commit ")
-
-          # Add detailed changes if there are more commits than PRs
-          if [[ $COMMIT_COUNT -gt $PR_COUNT ]]; then
-            COMMITS_SECTION=$'\n## Detailed changes\n'
-            COMMITS_SECTION+=$(git log ${PREVIOUS_TAG}..HEAD --no-merges --pretty=format:"* %s (%h)" | grep -v -i "version")
-
-            FULL_NOTES="${AUTO_NOTES}"$'\n\n'"${COMMITS_SECTION}"
-          else
-            FULL_NOTES="${AUTO_NOTES}"
-          fi
-
-          # Update release with notes
-          echo "$FULL_NOTES" > /tmp/release-notes.md
-          gh release edit "v${VERSION}" --draft=false --notes-file /tmp/release-notes.md
+            --notes-start-tag "${PREVIOUS_TAG}" \
+            --title "${VERSION} (${CURRENT_DATE})"
