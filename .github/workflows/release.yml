@@ -79,7 +79,7 @@ jobs:
         run: |
           CURRENT_DATE=$(date '+%b %-d, %Y')
           COMMIT_SHA=$(git rev-parse HEAD)
-
+      
           # Create temporary draft release with auto-generated notes
           gh release create "v${VERSION}" \
             --target ${COMMIT_SHA} \
@@ -87,16 +87,29 @@ jobs:
             --notes-start-tag "${PREVIOUS_TAG}" \
             --title "${VERSION} (${CURRENT_DATE})" \
             --draft
-
+      
           # Get auto-generated notes
           AUTO_NOTES=$(gh release view "v${VERSION}" --json body -q .body)
-
-          # Gather commit information since previous tag
-          COMMIT_HISTORY=$(git log ${PREVIOUS_TAG}..HEAD --no-merges --pretty=format:"* %s (%h)" | grep -v "^* ${VERSION}")
-
+      
+          # Gather commit information with authors in PR-like format
+          COMMIT_HISTORY=""
+          while read -r COMMIT_HASH COMMIT_MSG; do
+            AUTHOR=$(git show -s --format="%an" $COMMIT_HASH)
+            GITHUB_USERNAME=$(gh api users --jq '.login' -X GET -F q="$AUTHOR" || echo $AUTHOR)
+            
+            # Extract PR number if present
+            PR_NUM=$(echo "$COMMIT_MSG" | grep -o "#[0-9]\+" | head -1 | tr -d "#")
+            
+            if [ -n "$PR_NUM" ]; then
+              COMMIT_HISTORY+="* $COMMIT_MSG by @$GITHUB_USERNAME in https://github.com/$GITHUB_REPOSITORY/pull/$PR_NUM"$'\n'
+            else
+              COMMIT_HISTORY+="* $COMMIT_MSG by @$GITHUB_USERNAME ($COMMIT_HASH)"$'\n'
+            fi
+          done < <(git log ${PREVIOUS_TAG}..HEAD --no-merges --pretty=format:"%h %s" | grep -v "^[a-f0-9]\\+ ${VERSION}")
+      
           # Create comprehensive release notes
           FULL_NOTES="${AUTO_NOTES}"$'\n\n'"## All Changes"$'\n'"${COMMIT_HISTORY}"
-
+      
           # Update release with comprehensive notes
           echo "$FULL_NOTES" > /tmp/release-notes.md
           gh release edit "v${VERSION}" --draft=false --notes-file /tmp/release-notes.md
