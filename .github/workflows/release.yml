@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version type (patch/minor/major)'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: minor
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  version_and_publish:
+    name: Version Up and Release
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       contains(github.head_ref, 'release'))
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: "0"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Configure Git
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'github-actions@github.com'
+
+      - name: Install yarn
+        run: npm install -g yarn
+
+      - name: Set version type
+        id: version_type
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TYPE=${{ inputs.version_type }}" >> $GITHUB_ENV
+          else
+            echo "TYPE=minor" >> $GITHUB_ENV
+          fi
+
+      - name: Update Version
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          yarn version --${{ env.TYPE }} --no-git-tag-version --no-commit-hooks
+          VERSION=$(node -p "require('./package.json').version")
+          git tag "v${VERSION}" -m "Release v${VERSION}"
+          git push --follow-tags
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "PREVIOUS_TAG=${PREVIOUS_TAG}" >> $GITHUB_ENV
+
+      - name: Generate Release Notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT_DATE=$(date '+%b %-d, %Y')
+          COMMIT_SHA=$(git rev-parse HEAD)
+          
+          # Create temporary draft release with auto-generated notes
+          gh release create "v${VERSION}" \
+            --target ${COMMIT_SHA} \
+            --generate-notes \
+            --notes-start-tag ${PREVIOUS_TAG} \
+            --title "${VERSION} (${CURRENT_DATE})" \
+            --draft
+
+          # Get auto-generated notes
+          AUTO_NOTES=$(gh release view "v${VERSION}" --json body -q .body)
+
+          # Count PRs in this release (items in What's Changed section)
+          PR_COUNT=$(echo "$AUTO_NOTES" | grep -c "^\* ")
+
+          # Count non-version commits between tags
+          COMMIT_COUNT=$(git log ${PREVIOUS_TAG}..HEAD --no-merges | grep -v -i "version" | grep -c "^commit ")
+
+          # Add detailed changes if there are more commits than PRs
+          if [[ $COMMIT_COUNT -gt $PR_COUNT ]]; then
+            COMMITS_SECTION=$'\n## Detailed changes\n'
+            COMMITS_SECTION+=$(git log ${PREVIOUS_TAG}..HEAD --no-merges --pretty=format:"* %s (%h)" | grep -v -i "version")
+
+            FULL_NOTES="${AUTO_NOTES}"$'\n\n'"${COMMITS_SECTION}"
+          else
+            FULL_NOTES="${AUTO_NOTES}"
+          fi
+
+          # Update release with notes
+          echo "$FULL_NOTES" > /tmp/release-notes.md
+          gh release edit "v${VERSION}" --draft=false --notes-file /tmp/release-notes.md
