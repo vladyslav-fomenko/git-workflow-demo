@@ -60,8 +60,14 @@ jobs:
       - name: Update Version
         run: |
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "Previous tag found: ${PREVIOUS_TAG:-none}"
           yarn version --${{ env.TYPE }} --no-git-tag-version --no-commit-hooks
           VERSION=$(node -p "require('./package.json').version")
+          
+          git add package.json
+          git commit -m "chore: bump version to ${VERSION}"
+          git push origin HEAD:${GITHUB_REF#refs/heads/}
+          
           git tag "v${VERSION}" -m "Release v${VERSION}"
           git push --follow-tags
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
