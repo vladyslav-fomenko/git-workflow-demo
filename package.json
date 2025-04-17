@@ -1,6 +1,6 @@
 {
   "name": "demo",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "main": "index.js",
   "repository": "https://github.com/vladyslav-fomenko/git-workflow-demo.git",
   "author": "Vladyslav Fomenko <fomenko.vladyslav@airslate.com>",
