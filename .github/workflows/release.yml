@@ -94,12 +94,20 @@ jobs:
           # Gather commit information with authors in PR-like format
           COMMIT_HISTORY=""
           while read -r COMMIT_HASH COMMIT_MSG; do
-            AUTHOR=$(git show -s --format="%an" $COMMIT_HASH)
-            GITHUB_USERNAME=$(gh api users --jq '.login' -X GET -F q="$AUTHOR" || echo $AUTHOR)
+            # Get commit author's email
+            AUTHOR_EMAIL=$(git show -s --format="%ae" $COMMIT_HASH)
+            # Get author from commit metadata in GitHub
+            GITHUB_USERNAME=$(gh api repos/$GITHUB_REPOSITORY/commits/$COMMIT_HASH --jq '.author.login' 2>/dev/null || echo "")
             
+            # If we couldn't get username from API, use commit author name
+            if [ -z "$GITHUB_USERNAME" ] || [ "$GITHUB_USERNAME" = "null" ]; then
+              AUTHOR_NAME=$(git show -s --format="%an" $COMMIT_HASH)
+              GITHUB_USERNAME=$AUTHOR_NAME
+            fi
+      
             # Extract PR number if present
             PR_NUM=$(echo "$COMMIT_MSG" | grep -o "#[0-9]\+" | head -1 | tr -d "#")
-            
+      
             if [ -n "$PR_NUM" ]; then
               COMMIT_HISTORY+="* $COMMIT_MSG by @$GITHUB_USERNAME in https://github.com/$GITHUB_REPOSITORY/pull/$PR_NUM"$'\n'
             else
